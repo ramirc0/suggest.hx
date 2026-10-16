@@ -2,6 +2,7 @@
 (require "helix/misc.scm")
 (require "helix/components.scm")
 (require "helix/keymaps.scm")
+(require "helix/configuration.scm")
 (require (prefix-in helix.static. "helix/static.scm"))
 (require-builtin helix/core/keymaps as helix.keymaps.)
 (require "src/markup.scm")
@@ -19,11 +20,16 @@
          suggest-reject-all
          suggest-comment
          suggest-highlight
-         suggest-list)
+         suggest-list
+         suggest-paste-clipboard-after
+         suggest-paste-clipboard-before
+         suggest-replace-clipboard
+         suggest-newline-below
+         suggest-newline-above)
 
 (define *on* (hash))
 (define *lengths* (hash))
-(define *author* #f)
+(define *author* (with-handler (lambda (_) #f) (env-var "USER")))
 
 (define (doc-key)
   (doc-id->usize (current-doc)))
@@ -99,30 +105,11 @@
  (helix.keymaps.helix-string->keymap
   (value->jsexpr-string (hash "normal" normal-keys "select" normal-keys "insert" insert-keys))))
 
-(define review-keys
-  (hash "space"
-        (hash "m"
-              (hash "t" ":suggest-mode"
-                    "n" ":suggest-next"
-                    "p" ":suggest-prev"
-                    "a" ":suggest-accept"
-                    "r" ":suggest-reject"
-                    "A" ":suggest-accept-all"
-                    "R" ":suggest-reject-all"
-                    "c" ":suggest-comment"
-                    "h" ":suggest-highlight"
-                    "s" ":suggest-list")
-              "p" ":suggest-key paste-clipboard-after"
-              "P" ":suggest-key paste-clipboard-before"
-              "R" ":suggest-key replace-clipboard")
-        "]" (hash "s" ":suggest-next" "space" ":suggest-key newline-below")
-        "[" (hash "s" ":suggest-prev" "space" ":suggest-key newline-above")))
-
-(add-global-keybinding (hash "normal" review-keys "select" review-keys))
-
 ;;@doc
-;; Toggle suggestion mode for the focused buffer. While it is on, edits are
-;; recorded as CriticMarkup suggestions instead of changing the text.
+;; Toggle suggestion mode
+;;
+;; While it is on in the focused buffer, edits are recorded as CriticMarkup
+;; suggestions instead of changing the text.
 (define (suggest-mode)
   (define key (doc-key))
   (if (on?)
@@ -137,7 +124,10 @@
         (set-status! "Suggestion mode on"))))
 
 ;;@doc
-;; Attach `{>>@name<<}` to each new suggestion. An empty name turns this off.
+;; Set the author attached to new suggestions
+;;
+;; Each new suggestion gets `{>>@name<<}`. The default is `$USER`.
+;; An empty name turns attribution off.
 (define (suggest-author name)
   (set! *author* (if (equal? name "") #f name)))
 
@@ -177,9 +167,10 @@
     (remember-length!)))
 
 ;;@doc
-;; Run the editing command `name` from the suggestion key table. In a buffer
-;; in suggestion mode the change becomes a suggestion; elsewhere the command
-;; runs as usual.
+;; Run a tracked editing command
+;;
+;; Runs the command `name` from the suggestion key table. In a buffer in
+;; suggestion mode its change becomes a suggestion. Elsewhere it runs as usual.
 (define (suggest-key name)
   (define entry (hash-ref commands name))
   (cond
@@ -243,13 +234,17 @@
   (helix.static.align_view_center))
 
 ;;@doc
-;; Select the next suggestion, wrapping to the first.
+;; Select next suggestion
+;;
+;; Wraps to the first suggestion after the last.
 (define (suggest-next)
   (define s (next-span (doc-spans) (cursor-position)))
   (if s (jump! s) (set-status! "No suggestions")))
 
 ;;@doc
-;; Select the previous suggestion, wrapping to the last.
+;; Select previous suggestion
+;;
+;; Wraps to the last suggestion before the first.
 (define (suggest-prev)
   (define s (prev-span (doc-spans) (car (primary-range))))
   (if s (jump! s) (set-status! "No suggestions")))
@@ -265,12 +260,12 @@
         (set-status! "No suggestion at cursor"))))
 
 ;;@doc
-;; Accept the suggestion under the cursor.
+;; Accept suggestion under cursor
 (define (suggest-accept)
   (resolve-at! #t))
 
 ;;@doc
-;; Reject the suggestion under the cursor.
+;; Reject suggestion under cursor
 (define (suggest-reject)
   (resolve-at! #f))
 
@@ -285,17 +280,19 @@
           (set-cursor! (min p (max 0 (- (string-length new) 1))))))))
 
 ;;@doc
-;; Accept every suggestion in the buffer.
+;; Accept all suggestions in buffer
 (define (suggest-accept-all)
   (resolve-all! #t))
 
 ;;@doc
-;; Reject every suggestion in the buffer.
+;; Reject all suggestions in buffer
 (define (suggest-reject-all)
   (resolve-all! #f))
 
 ;;@doc
-;; Insert a comment after the selection and start typing in it.
+;; Comment after selection
+;;
+;; Inserts `{>><<}` after the selection and starts insert mode inside it.
 (define (suggest-comment)
   (define to (cdr (primary-range)))
   (replace-range! to to "{>><<}")
@@ -303,7 +300,9 @@
   (set-cursor! (+ to 3)))
 
 ;;@doc
-;; Highlight the selection, attach a comment to it, and start typing in it.
+;; Highlight selection with comment
+;;
+;; Wraps the selection as `{==sel==}{>><<}` and starts insert mode in the comment.
 (define (suggest-highlight)
   (let* ([sel (primary-range)]
          [from (car sel)]
@@ -336,10 +335,83 @@
                  (preview text s)))
 
 ;;@doc
-;; Pick a suggestion from a list of every suggestion in the buffer and jump to it.
+;; Pick a suggestion to jump to
+;;
+;; Lists every suggestion in the buffer in a fuzzy picker.
 (define (suggest-list)
   (let* ([text (doc-string)]
          [spans (parse text)])
     (if (null? spans)
         (set-status! "No suggestions")
         (open-picker (map (lambda (s) (cons (label text s) s)) spans) jump!))))
+
+;;@doc
+;; Paste clipboard after selections
+(define (suggest-paste-clipboard-after)
+  (suggest-key "paste-clipboard-after"))
+
+;;@doc
+;; Paste clipboard before selections
+(define (suggest-paste-clipboard-before)
+  (suggest-key "paste-clipboard-before"))
+
+;;@doc
+;; Replace selections by clipboard content
+(define (suggest-replace-clipboard)
+  (suggest-key "replace-clipboard"))
+
+;;@doc
+;; Add newline below
+(define (suggest-newline-below)
+  (suggest-key "newline-below"))
+
+;;@doc
+;; Add newline above
+(define (suggest-newline-above)
+  (suggest-key "newline-above"))
+
+;; Each entry: key sequence, command name, command.
+(define review-bindings
+  (list (list '("space" "m" "t") "suggest-mode" suggest-mode)
+        (list '("space" "m" "n") "suggest-next" suggest-next)
+        (list '("space" "m" "p") "suggest-prev" suggest-prev)
+        (list '("space" "m" "a") "suggest-accept" suggest-accept)
+        (list '("space" "m" "r") "suggest-reject" suggest-reject)
+        (list '("space" "m" "A") "suggest-accept-all" suggest-accept-all)
+        (list '("space" "m" "R") "suggest-reject-all" suggest-reject-all)
+        (list '("space" "m" "c") "suggest-comment" suggest-comment)
+        (list '("space" "m" "h") "suggest-highlight" suggest-highlight)
+        (list '("space" "m" "s") "suggest-list" suggest-list)
+        (list '("space" "p") "suggest-paste-clipboard-after" suggest-paste-clipboard-after)
+        (list '("space" "P") "suggest-paste-clipboard-before" suggest-paste-clipboard-before)
+        (list '("space" "R") "suggest-replace-clipboard" suggest-replace-clipboard)
+        (list '("]" "s") "suggest-next" suggest-next)
+        (list '("[" "s") "suggest-prev" suggest-prev)
+        (list '("]" "space") "suggest-newline-below" suggest-newline-below)
+        (list '("[" "space") "suggest-newline-above" suggest-newline-above)))
+
+(define (insert-path h path value)
+  (if (null? (cdr path))
+      (hash-insert h (car path) value)
+      (hash-insert h
+                   (car path)
+                   (insert-path (if (hash-contains? h (car path)) (hash-ref h (car path)) (hash))
+                                (cdr path)
+                                value))))
+
+(define review-keys
+  (foldl (lambda (b acc) (insert-path acc (car b) (string-append ":" (cadr b)))) (hash) review-bindings))
+
+;; keymaps.scm looks docs up with a global `eval`, which cannot see this
+;; module's commands while it loads, so attach the first doc line here.
+(define review-docs
+  (foldl (lambda (b acc) (hash-insert acc
+                                    (cadr b)
+                                    (trim (car (split-many (#%function-ptr-table-get #%function-ptr-table (caddr b)) "\n")))))
+         (hash)
+         review-bindings))
+
+(define global-bindings (get-keybindings))
+(merge-keybindings global-bindings (hash "normal" review-keys "select" review-keys))
+(helix.keymaps.keymap-update-documentation! global-bindings review-docs)
+(keybindings global-bindings)

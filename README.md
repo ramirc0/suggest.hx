@@ -20,8 +20,9 @@ Run `forge install` from a clone of this repo. Then add this to `~/.config/helix
 
 ```scheme
 (require "suggest.hx/suggest.scm")
-(suggest-author "your-name") ; optional: attach {>>@your-name<<} to each suggestion
 ```
+
+Each new suggestion is tagged with `{>>@$USER<<}`. To use another name, add `(suggest-author "name")`. To turn tagging off, add `(suggest-author "")`.
 
 ## Keys
 

@@ -85,7 +85,10 @@
  (check-equal? "deletion" (diff "abc" "ac") (list 1 2 ""))
  (check-equal? "newline trims trailing blanks" (diff "a  " "a\n") (list 1 3 "\n"))
  (check-equal? "repeated chars" (diff "aa" "aaa") (list 2 2 "a"))
- (check-equal? "no change" (diff "ab" "ab") #f))
+ (check-equal? "no change" (diff "ab" "ab") #f)
+ (check-equal? "open line slides to end before cursor" (diff "a\n" "a\n\n" 2) (list 1 1 "\n"))
+ (check-equal? "no slide when cursor is at end" (diff "ab" "aab" 2) (list 1 1 "a"))
+ (check-equal? "slides to put cursor at end" (diff "ab" "aab" 1) (list 0 0 "a")))
 
 (test-module
  "navigation"

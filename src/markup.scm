@@ -425,11 +425,27 @@
 ;;@doc
 ;; The single edit that turns `old` into `new`: old[a, b) became `s`.
 ;; Returns (list a b s), or #f when the strings are equal.
+;; A pure insertion that could sit at several offsets, such as a newline
+;; next to a newline, slides left until `cursor` (an offset in `new`) is at
+;; its end.
 ;;
 ;; ```scheme
-;; (diff old new) -> (or (list int? int? string?) #f)
+;; (diff old new [cursor]) -> (or (list int? int? string?) #f)
 ;; ```
-(define (diff old new)
+(define (diff old new [cursor #f])
+  (define change (minimal-diff old new))
+  (if (and change cursor (= (car change) (cadr change)))
+      (slide new change cursor)
+      change))
+
+(define (slide new change cursor)
+  (define a (car change))
+  (define n (string-length (list-ref change 2)))
+  (if (and (> a 0) (< cursor (+ a n)) (char=? (string-ref new (- a 1)) (string-ref new (+ a n -1))))
+      (slide new (list (- a 1) (- a 1) (substring new (- a 1) (+ a n -1))) cursor)
+      change))
+
+(define (minimal-diff old new)
   (define ov (string->vector old))
   (define nv (string->vector new))
   (define on (vector-length ov))

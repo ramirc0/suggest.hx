@@ -16,7 +16,11 @@ Typing inside your own insertion extends it, and deleting there deletes for real
 
 This needs the Steel fork of Helix (`mattwparas/helix`, branch `steel-event-system`). Build it with `cargo xtask steel`.
 
-Run `forge install` from a clone of this repo. Then add this to `~/.config/helix/init.scm`:
+```sh
+forge pkg install --git https://github.com/ramirc0/suggest.hx
+```
+
+Then add this to `~/.config/helix/init.scm`:
 
 ```scheme
 (require "suggest.hx/suggest.scm")

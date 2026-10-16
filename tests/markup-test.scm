@@ -80,6 +80,14 @@
  (check-equal? "keeps content" (cleanup "{++a++}" 3) (cons "{++a++}" 3)))
 
 (test-module
+ "diff"
+ (check-equal? "insertion" (diff "ac" "abc") (list 1 1 "b"))
+ (check-equal? "deletion" (diff "abc" "ac") (list 1 2 ""))
+ (check-equal? "newline trims trailing blanks" (diff "a  " "a\n") (list 1 3 "\n"))
+ (check-equal? "repeated chars" (diff "aa" "aaa") (list 2 2 "a"))
+ (check-equal? "no change" (diff "ab" "ab") #f))
+
+(test-module
  "navigation"
  (check-equal? "next" (Span-start (next-span spans 2)) 9)
  (check-equal? "next wraps" (Span-start (next-span spans 10)) 1)

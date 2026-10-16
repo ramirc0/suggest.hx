@@ -14,7 +14,8 @@
          track-change
          resolve
          resolve-all
-         cleanup)
+         cleanup
+         diff)
 
 ;;@doc
 ;; A CriticMarkup construct found by `parse`.
@@ -420,3 +421,25 @@
                acc))
          (cons text cursor)
          (reverse (parse text))))
+
+;;@doc
+;; The single edit that turns `old` into `new`: old[a, b) became `s`.
+;; Returns (list a b s), or #f when the strings are equal.
+;;
+;; ```scheme
+;; (diff old new) -> (or (list int? int? string?) #f)
+;; ```
+(define (diff old new)
+  (define ov (string->vector old))
+  (define nv (string->vector new))
+  (define on (vector-length ov))
+  (define nn (vector-length nv))
+  (define p
+    (let loop ([i 0])
+      (if (and (< i on) (< i nn) (char=? (vector-ref ov i) (vector-ref nv i))) (loop (+ i 1)) i)))
+  (define q
+    (let loop ([j 0])
+      (if (and (< j (- on p)) (< j (- nn p)) (char=? (vector-ref ov (- on j 1)) (vector-ref nv (- nn j 1))))
+          (loop (+ j 1))
+          j)))
+  (and (not (and (= p on) (= p nn))) (list p (- on q) (substring new p (- nn q)))))
